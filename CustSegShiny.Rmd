@@ -1,0 +1,365 @@
+---
+title: "Customer Segmentation App"
+author: "ZackM"
+date: "6/19/2017"
+output: slidy_presentation
+runtime: shiny
+
+<P style="page-break-before: always">
+---
+
+
+## <span style="color:navy">About The App</span><br /> 
+<br />
+
+###<span style="color:gray">__Visualization Objective:__</span>
+###Provide business intelligence on customer segments to sales & marketing dept.<br />
+<br />  
+    
+
+###<span style="color:gray">__Segments customers by:__</span> 
+
+* ###*State*   
+* ###*Age group*  
+* ###*Average Revenue Per User* (ARPU)  
+* ###*Recency*: Time in days between current date and date of most recent purchase--
+* ###*Frequency*:  Number of purchases over the quarter--
+* ###*Monetary Value*:  Total money spent by a customer over the quarter
+<br />
+
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+mydat2 <- read.csv("mydat2.csv", header = T, stringsAsFactors = F)
+mydata <- read.csv("rfm_Final.csv", header = T, stringsAsFactors = F)
+```
+
+##<span style="color:navy">About The Data Set: Emerson Organics Sales, Q1 2017</span>
+
+<h3><b><span style="color:gray">Raw Data:</span></b></h3><h4>&nbsp;&gt;&nbsp;25k+ transactions by ~14k customers across 18 states</h4>
+```{r Table1,echo=FALSE, message=FALSE, warning=FALSE}
+
+mydata <- read.csv("rfm_Final.csv", header = T, stringsAsFactors = F)
+library(data.table)
+library(tables)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(xtable)
+colnames(mydata)[6] <- "Name"
+mydatsample <- head(mydata,2)
+
+mydatsam1 <- mydatsample[,2:8]
+
+#dtsam1 <- format(mydatsample1, justification = "c")
+kable(mydatsam1, "html") %>%
+  kable_styling(bootstrap_options = "striped", font_size =15, full_width = F, position = "left")
+#print(mydatsam1, size="\\fontsize{2pt}{9pt}\\selectfont")
+
+```
+<br>
+
+<h3><b><span style="color:gray">Transformed Data:</span></b></h3>
+####> To calculate Recency, Freq., and MonetaryVal.
+```{r Table2,echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(sqldf)
+library(data.table)
+library(webshot)
+library(shinyBS)
+library(shinythemes)
+library(shinydashboard)
+
+
+mydata <- read.csv("rfm_Final.csv", header = T, stringsAsFactors = F)
+sdata <- head(mydata[23:26,2:8])
+rfm_dat <- mydata[,c(1,2,3,4,5,6,11,12,13)]
+rfm_dat_unique <- rfm_dat[!duplicated(rfm_dat$cust_id),]
+colnames(rfm_dat_unique)[6] <- "Name"
+colnames(rfm_dat_unique)[7] <- "Recency"
+colnames(rfm_dat_unique)[8] <- "Freq."
+colnames(rfm_dat_unique)[9] <- "MonetaryVal($)"
+df_brush <- rfm_dat_unique[,c(6,5,7,8,9)]
+df <- rfm_dat_unique[,c(7,8,9)]
+mydata <- data.table(mydata)
+mydata <- mydata[, AgeBand:=(ifelse(mydata$age < 30, 1, ifelse(mydata$age < 40, 2, ifelse(mydata$age < 50, 3, ifelse(mydata$age < 60, 4,5)))))]
+mydata$AgeGroup <- ifelse(mydata$AgeBand==1, "20s", ifelse(mydata$AgeBand==2, "30s", ifelse(mydata$AgeBand==3, "40s", ifelse(mydata$AgeBand==4, "50s", "60 & Above"))))
+mydata$grand_total <- as.numeric(mydata$grand_total)
+mydata2 <- sqldf("SELECT COUNT(DISTINCT(cust_id)) Cust_Count, 
+                 SUM(grand_total) Revenue, 
+                 ROUND(SUM(grand_total)/COUNT(DISTINCT cust_id), 2) ARPU,  
+                 ROUND(AVG(Freq),2) AvgFreq, AgeGroup, state 
+                 FROM mydata
+                 GROUP BY state, AgeGroup")
+
+mydatsam2 <- rfm_dat_unique[1:2, c(2,4,5,6,7,8,9)]
+kable(mydatsam2, "html") %>%
+  kable_styling(bootstrap_options = "striped", font_size =15, full_width = F, position = "left")
+```
+
+####> To calculate Avg.Freq. and ARPU by Age group:
+```{r Table3,echo=FALSE, message=FALSE, warning=FALSE}
+mydata2 <- data.frame(mydata2)
+mydatsam3 <- head(mydata2,2)
+kable(mydatsam3, "html") %>%
+  kable_styling(bootstrap_options = "striped", font_size =15, full_width = F, position = "left")
+```
+
+
+
+
+
+## <span style="color:navy">App Dashboard: Plotting Customer Segments</span>
+
+
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(sqldf)
+library(data.table)
+library(webshot)
+library(shinyBS)
+library(shinythemes)
+library(shinydashboard)
+
+mydata <- read.csv("rfm_Final.csv", header = T, stringsAsFactors = F)
+sdata <- head(mydata[23:26,2:8])
+rfm_dat <- mydata[,c(1,2,3,4,5,6,11,12,13)]
+rfm_dat_unique <- rfm_dat[!duplicated(rfm_dat$cust_id),]
+colnames(rfm_dat_unique)[6] <- "Name"
+colnames(rfm_dat_unique)[7] <- "Recency"
+colnames(rfm_dat_unique)[8] <- "Freq."
+colnames(rfm_dat_unique)[9] <- "MonetaryVal($)"
+df_brush <- rfm_dat_unique[,c(6,5,7,8,9)]
+df <- rfm_dat_unique[,c(7,8,9)]
+mydata <- data.table(mydata)
+mydata <- mydata[, AgeBand:=(ifelse(mydata$age < 30, 1, ifelse(mydata$age < 40, 2, ifelse(mydata$age < 50, 3, ifelse(mydata$age < 60, 4,5)))))]
+mydata$AgeGroup <- ifelse(mydata$AgeBand==1, "20s", ifelse(mydata$AgeBand==2, "30s", ifelse(mydata$AgeBand==3, "40s", ifelse(mydata$AgeBand==4, "50s", "60 & Above"))))
+mydata$grand_total <- as.numeric(mydata$grand_total)
+mydata2 <- sqldf("SELECT COUNT(DISTINCT(cust_id)) Cust_Count, 
+                 SUM(grand_total) Revenue, 
+                 ROUND(SUM(grand_total)/COUNT(DISTINCT cust_id), 2) ARPU,  
+                 ROUND(AVG(Freq),2) AvgFreq, AgeGroup, state 
+                 FROM mydata
+                 GROUP BY state, AgeGroup")
+mydata2 <- data.frame(mydata2)
+library(shiny)
+
+
+shinyApp(
+  ui <- fluidPage(theme=shinytheme("yeti"),
+    tags$head(tags$style(HTML("
+    @import url('http://fonts.googleapis.com/css?family=Trajan:400,500,700');
+    @import url('http://fonts.googleapis.com/css?family=Helvetica:400,500,700');
+                                
+                                h1{
+                                font-family: 'Trajan';
+                                font-style: normal;
+                                font-weight: 500;
+                                line-height: 2.1;
+                                color: #4cc552;
+                                }
+
+                                h2{
+                                font-family: 'Trajan';
+                                font-style: normal;
+                                font-weight: 300;
+                                line-height: 0.5;
+                                color: #0059b3;
+                                }
+
+                              h3{
+                              font-family: 'Helvetica';
+                              font-style: normal;
+                              font-size: 7px;
+                              line-height: 0.5;
+                              color: #00000;
+                              }
+
+                        
+                                #body{
+                                #background-color:#e6e6fa
+                                #}
+                            
+                                "))
+              
+              
+                ),
+  
+  headerPanel(
+      fluidRow(
+        column(12, img(height=59, width =59, src =('http://www.goo.gl/iaZ4Wo')), "Emerson Organics"),
+        column(6, offset = 3 , h2("U.S. Market Customer Segmentation"))
+                  )),
+    pageWithSidebar(
+    headerPanel(' '),
+    #  mainPanel(
+    sidebarPanel('', width=2),
+    mainPanel(
+        tabsetPanel( 
+  
+          tabPanel("Introduction",
+                   span(htmlOutput("Instruction", inline = FALSE), style='color: dark gray; font-size:17px'), htmlOutput("Instruction2"),tableOutput("sdata")),
+          tabPanel("K-means Clusters",
+            pageWithSidebar(
+              headerPanel(''),
+              sidebarPanel(
+                selectInput('xcol', 'X Variable', names(df),
+                            selected = names(df)[[3]], width = "100%"),
+                selectInput('ycol', 'Y Variable', names(df),
+                            selected=names(df)[[2]], width = "100%"),
+                numericInput('clusters', 'Cluster count', 4,
+                             min = 1, max = 5, width = "100%"), width = "3"
+              ),
+              mainPanel(
+                textOutput(h2('RFM K-means Clusters')),
+                plotOutput('plot1', width = "90%", height = "320px", brush = 'plot_brush',hover='plot_hover'), 
+                span(htmlOutput('Instruction4', inline = 'false'), style='color: dark gray; font-size:10px'),
+                dataTableOutput('info')
+              )
+            )),
+          
+          tabPanel("Count by Age Group",
+                   pageWithSidebar(
+                     headerPanel(''),
+                     sidebarPanel(
+                          selectInput("State1", "Select State", 
+                                      choices = c("CA", 
+                                                  "CT",
+                                                  "FL",
+                                                  "IL",
+                                                  "LA",
+                                                  "MA",
+                                                  "MD",
+                                                  "MI",
+                                                  "MN",
+                                                  "MO",
+                                                  "NJ",
+                                                  "NY",
+                                                  "OH",
+                                                  "PA",
+                                                  "TX",
+                                                  "VA",
+                                                  "WA",
+                                                  "WI"),
+                                      selected = "CA", width = "100%"), width = 2),
+                          
+                   mainPanel(
+                     plotOutput("BarChart1", width = "90%", height = "300px"),
+                     dataTableOutput('results1')
+                     )
+                   )),
+          tabPanel("ARPU by Age Group",
+                   pageWithSidebar(
+                     headerPanel(''),
+                     sidebarPanel(
+                       selectInput("State2", "Select State", 
+                                   choices = c("CA", 
+                                               "CT",
+                                               "FL",
+                                               "IL",
+                                               "LA",
+                                               "MA",
+                                               "MD",
+                                               "MI",
+                                               "MN",
+                                               "MO",
+                                               "NJ",
+                                               "NY",
+                                               "OH",
+                                               "PA",
+                                               "TX",
+                                               "VA",
+                                               "WA",
+                                               "WI"),
+                                   selected = "CA", width = "100%"), width = 2),
+                   
+                   mainPanel(
+                   plotOutput("BarChart2", width = "90%", height = "300px"),
+                   dataTableOutput('results2')
+                   )
+                   ))
+          #tabPanel("Data Table",
+                   #dataTableOutput("results"))
+       
+        )
+      )
+    )
+  ),
+  
+# SERVER FUNCTION  
+  server <- function(input, output, session){
+    selectedData <- reactive({
+      rfm_dat_unique[, c(input$xcol, input$ycol)]
+    })
+    
+    clusters <- reactive({
+      kmeans(selectedData(), input$clusters)
+    })
+    
+    output$plot1 <- renderPlot({
+      palette(c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3",
+                "#FF7F00", "#FFFF33", "#A65628", "#F781BF", "#999999"))
+      
+      par(mar = c(5, 4, 0, 1))
+      plot(selectedData(),
+           col = clusters()$cluster,
+           pch = 20, cex.axis = 1, cex.lab = 1.25)
+      points(clusters()$centers, pch = 4, cex = 2.5 , lwd = 2)
+    })
+# Brushed Points - K Means    
+    output$info <- renderDataTable({
+      brushedPoints(df_brush, input$plot_brush, xvar = input$xcol, yvar = input$ycol)}, 
+      options = list(scrollY = 200, lengthMenu = c(5,10,20,30)))
+    
+    filtered1 <- reactive({ 
+      mydata2%>%filter(mydata2$state==input$State1)
+    })
+    
+    output$results1 <- renderDataTable({
+      as.data.frame(filtered1())}, 
+      options = list(scrollY = 200, lengthMenu = c(5,10,20,30)))
+    
+    
+    filtered2 <- reactive({
+      mydata2%>%filter(mydata2$state==input$State2)
+    })
+    
+    output$results2 <- renderDataTable({
+      as.data.frame(filtered2())},
+      options = list(scrollY = 200, lengthMenu = c(5,10,20,30)))
+    
+    
+    output$Instruction <- renderText(paste("<br><b> &emsp; &nbsp; &nbsp; &nbsp; &nbsp; &emsp; Welcome to the Emerson Organics' Segmentation App<sup>&copy</sup>  !</b>"))
+                        
+    output$Instruction2 <- renderText(paste("<b>","<br>","<br>",">>> Segmentation: By State, By Age, By Revenue:","</b>","<br>","Customers may be segmented based on Age Group or <i>Avg. Revenue Per User </i>(ARPU)","<br>","Select a state from the dropdown in the left column","<br>","Click on the relevant tabs to generate the plots or data table","<br>","<br>","<b>>>> About The Dataset:","</b>","<br>","Quarterly sales database records the following variables from each transaction:","<br>","Customer ID, Order Date, Order ID, Region, Name, Age, and Grand Total($)","<br>","A sample of the same data (Q1,2017) is printed below for your perusal:","<br>","<br"))
+    
+    output$Instruction4 <- renderText(paste('Select Points On The ScatterPlot For Table Below'))
+    
+    output$sdata <- renderTable(sdata)
+    
+    
+    
+    output$BarChart1 <- renderPlot({
+      
+      ggplot(filtered1(), aes(AgeGroup)) + geom_bar(aes(weight = Cust_Count), width = 0.4) + theme(text = element_text(size = 14), axis.text = element_text(size=12)) + labs(x = "Age Group", y = "Total Customers")
+    })
+    
+    output$BarChart2 <- renderPlot({
+      
+      ggplot(filtered2(), aes(AgeGroup)) + geom_bar(aes(weight = ARPU), width = 0.4) + theme(text = element_text(size = 14), axis.text = element_text(size=12)) + labs(x="Age Group", y = "Avg. Revenue Per User ($)")
+    })
+    
+  },
+options = list(height = 500)
+)
+
+   
+```
+
+
+
